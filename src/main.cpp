@@ -39,7 +39,6 @@ code	color
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
-uint32_t targetTime = 0;       // for next 1 second timeout
 
 byte omm = 99;
 boolean initial = 1;
@@ -68,8 +67,10 @@ void WiFi_Connect()
 }
 
 //获取WBTC价格
-void getBitcoinPrices(){
+double getBitcoinPrices(){
 	HTTPClient http;
+	double price = 0;
+
 	http.begin(oklinkBtcPriceUrl);
 
 	http.addHeader("Cookie", "aliyungf_tc=512e21b79e058e7ce565360b7ba5ff90d0c7a752b3e50b6c2a8e276264b02f8e; locale=en_US"); // 添加自定义 header
@@ -95,24 +96,25 @@ void getBitcoinPrices(){
 			//	使用ArduinoJson_6.x版本，具体请移步：https://github.com/bblanchon/ArduinoJson
 			deserializeJson(doc, resBuff); //开始使用Json解析
 			
-			
 			JsonVariant wbtcPriceJsonVariant = doc["data"][0]["tokenList"][0]["price"];
-			wbtcPrice = wbtcPriceJsonVariant.as<double>();
+			price = wbtcPriceJsonVariant.as<double>();
 
-			char buf[10];
-			sprintf(buf, "%.2lf", wbtcPrice);
-			wbtcPriceStr = String(buf);
+			// char buf[10];
+			// sprintf(buf, "%.2lf", wbtcPrice);
+			// wbtcPriceStr = String(buf);
 
-			Serial.printf("WBTC/USD: %s\r\n",wbtcPriceStr);
+			// Serial.printf("WBTC/USD: %s\r\n",wbtcPriceStr);
 
 		}
 	}
 	else
 	{
 		Serial.printf("HTTP Get Error: %s\r\n", http.errorToString(httpCode).c_str());
+		price = 0;
 	}
 
 	http.end();
+	return price;
 }
 
 void setup(void) {
@@ -133,17 +135,22 @@ void setup(void) {
 	Serial.println("IP address: ");
 	Serial.println(WiFi.localIP());
 
-//   targetTime = millis() + 1000; 
 }
 
 void loop() {
-  getBitcoinPrices();
 
-  Serial.println(wbtcPriceStr);
-  tft.setTextColor(0xFBE0, TFT_BLACK);
-  tft.drawString(wbtcPriceStr,0,0,7);
+	wbtcPrice = getBitcoinPrices();
 
-  delay(1000*5);
+	char buf[10];
+	sprintf(buf, "%.2lf", wbtcPrice);
+	wbtcPriceStr = String(buf);
+
+
+	Serial.println(wbtcPriceStr);
+	tft.setTextColor(0xFBE0, TFT_BLACK);
+	tft.drawString(wbtcPriceStr, 20, TFT_WIDTH/2-20, 6);
+
+	delay(1000 * 10);
 }
 
 
