@@ -84,6 +84,9 @@ void WiFi_Connect()
 	//循环遍历wifi信号
 	for(; index < wifiMsgCount; index++){
 		Serial.printf("Select Wifi: %s\n",wifiMsgBuf[index][0].c_str());
+
+		//清屏
+		tft.fillScreen(TFT_BLACK);
 		WiFi.begin(wifiMsgBuf[index][0].c_str(), wifiMsgBuf[index][1].c_str());
 		while (WiFi.status() != WL_CONNECTED)
 		{
@@ -92,10 +95,10 @@ void WiFi_Connect()
 			//这里是阻塞程序，直到连接成功
 			delay(300);
 			Serial.print(".");
-
-			tft.fillScreen(TFT_BLACK);
-			tft.setTextColor(0xBDF7, TFT_BLACK);
-			tft.drawString(wifiMsgBuf[index][0], 20, TFT_WIDTH/2-20, 3);
+			
+			tft.setTextColor(TFT_WHITE, TFT_BLACK);
+			tft.drawCentreString("Connect WIFI",120,30,2);
+      		tft.drawCentreString(wifiMsgBuf[index][0].c_str(),120,60,4);
 
 			if((--timeout) <= 0){
 				timeout = 20;
@@ -106,8 +109,9 @@ void WiFi_Connect()
 		}
 
 		if(index >= (wifiMsgCount-1)){
+			Serial.println("index = 0");
 			//回到首个wifi继续尝试连接
-			index = 0;
+			index = -1;
 		}
 
 		//未超时，已正常连接
@@ -195,8 +199,9 @@ void loop() {
 
 	Serial.println(wbtcPriceStr);
 	tft.fillScreen(TFT_BLACK);
-	tft.setTextColor(0xFBE0, TFT_BLACK);
-	tft.drawString(wbtcPriceStr, 20, TFT_WIDTH/2-20, 6);
+	tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+	// tft.drawString(wbtcPriceStr, 20, TFT_WIDTH/2-20, 6);
+	tft.drawCentreString(wbtcPriceStr.c_str(),120,50,6);
 
 	delay(1000 * 10);
 }
