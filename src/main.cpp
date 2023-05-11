@@ -1,17 +1,5 @@
-/*
- An example digital clock using a TFT LCD screen to show the time.
- Demonstrates use of the font printing routines. (Time updates but date does not.)
- 
- For a more accurate clock, it would be better to use the RTClib library.
- But this is just a demo. 
- 
- This examples uses the hardware SPI only. Non-hardware SPI
- is just too slow (~8 times slower!)
- 
- Based on clock sketch by Gilchrist 6/2/2014 1.0
- Updated by Bodmer
-A few colour codes:
- 
+
+/* 
 code	color
 0x0000	Black
 0xFFFF	White
@@ -34,7 +22,18 @@ code	color
 #include <HTTPClient.h>
 #include "../lib/ArduinoJson/ArduinoJson.h"
 
-#define VERSION "V1.0.02"
+#define VERSION "v1.0.02"
+
+#define KEY35 35
+
+#define BTC_MODE  1
+#define ETH_MODE  2
+
+#define OK_ACCESS_KEY "d15a2f3a-a9ce-4714-850e-3dedb66db001"
+#define WBTC_TOKEN_CONTRACT_ADDRESS "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+#define STETH_TOKEN_CONTRACT_ADDRESS "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
+#define OKLINK_TOKENLIST_URL_BASE "https://www.oklink.com/api/v5/explorer/token/token-list?"
+
 
 
 String wifiMsgBuf[10][2] = {
@@ -43,17 +42,16 @@ String wifiMsgBuf[10][2] = {
 	{"xxx3","yyy3"}
 };
 
-TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
 DynamicJsonDocument doc(2048);
 
 int getPriceErrCount = 0; //获取价格出错次数
-double wbtcPrice = -1; //WBTC价格
-String wbtcPriceStr = "";
-String OK_ACCESS_KEY = "d15a2f3a-a9ce-4714-850e-3dedb66db001";
+double coinPrice = -1; //WBTC价格
+String coinPriceStr = "";
 String chainShortName = "eth";
-String tokenContractAddress = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
-String oklinkBtcPriceUrl = "https://www.oklink.com/api/v5/explorer/token/token-list?chainShortName=" + chainShortName + "&tokenContractAddress=" + tokenContractAddress;
+int currentCoinDisplayMode = BTC_MODE;
+
+TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
 //获取已存储wifi信息数量
 int getWifiMsgCount(){
@@ -123,9 +121,38 @@ void WiFi_Connect()
 	}
 }
 
+
+//KEY35中断处理函数
+void changeCoinDisplayMode(){
+
+	if(digitalRead(KEY35) == LOW){
+
+		//切换显示模式标志位
+		Serial.println("change Display Mode");
+
+		tft.fillScreen(TFT_BLACK);
+		tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+		if(currentCoinDisplayMode == BTC_MODE){
+			currentCoinDisplayMode = ETH_MODE;
+			tft.drawCentreString("ETH  MODE",120,60,4);
+		}else{
+			currentCoinDisplayMode = BTC_MODE;
+			tft.drawCentreString("BTC  MODE",120,60,4);
+		}
+
+	}
+}
+
 //初始化函数
 void setup(void) {
-  	Serial.begin(115200); // open the serial port at 115200 bps;
+	//初始化PIN35按键,设置为上拉输入
+	pinMode(KEY35, INPUT_PULLUP);
+	//绑定币种切换显示模式函数，下降沿触发
+	attachInterrupt(digitalPinToInterrupt(KEY35), changeCoinDisplayMode, FALLING);
+
+	//初始化串口，波特率115200
+  	Serial.begin(115200); 
 	delay(100);
 
 	tft.init();
@@ -149,7 +176,9 @@ double getBitcoinPrices(){
 	HTTPClient http;
 	double price = 0;
 
-	http.begin(oklinkBtcPriceUrl);
+	String wbtcTokenListUrl = (String)OKLINK_TOKENLIST_URL_BASE + "chainShortName=" + chainShortName + "&tokenContractAddress=" + WBTC_TOKEN_CONTRACT_ADDRESS;
+
+	http.begin(wbtcTokenListUrl);
 
 	http.addHeader("Cookie", "aliyungf_tc=512e21b79e058e7ce565360b7ba5ff90d0c7a752b3e50b6c2a8e276264b02f8e; locale=en_US"); // 添加自定义 header
 	http.addHeader("Host", "oklink.com");
@@ -189,13 +218,60 @@ double getBitcoinPrices(){
 	return price;
 }
 
+//获取stETH价格
+double getETHPrices(){
+	HTTPClient http;
+	double price = 0;
+
+	String stETHTokenListUrl = (String)OKLINK_TOKENLIST_URL_BASE + "chainShortName=" + chainShortName + "&tokenContractAddress=" + STETH_TOKEN_CONTRACT_ADDRESS;
+
+	http.begin(stETHTokenListUrl);
+
+	http.addHeader("Cookie", "aliyungf_tc=512e21b79e058e7ce565360b7ba5ff90d0c7a752b3e50b6c2a8e276264b02f8e; locale=en_US"); // 添加自定义 header
+	http.addHeader("Host", "oklink.com");
+	http.addHeader("User-Agent", "PostmanRuntime/7.29.0");
+	http.addHeader("Accept", "*/*");
+	http.addHeader("Accept-Encoding", "gzip, deflate, br");
+	http.addHeader("Connection", "keep-alive");
+	http.addHeader("Ok-Access-Key", "d15a2f3a-a9ce-4714-850e-3dedb66db001");
+	int httpCode = http.GET();
+
+	if (httpCode > 0)
+	{
+		if (httpCode == HTTP_CODE_OK) // 收到正确的内容
+		{
+			String resBuff = http.getString();
+
+			//	使用ArduinoJson_6.x版本，具体请移步：https://github.com/bblanchon/ArduinoJson
+			deserializeJson(doc, resBuff); //开始使用Json解析
+			
+			JsonVariant stETHPriceJsonVariant = doc["data"][0]["tokenList"][0]["price"];
+			price = stETHPriceJsonVariant.as<double>();
+
+		}
+	}
+	else
+	{
+		Serial.printf("HTTP Get Error: %s\r\n", http.errorToString(httpCode).c_str());
+		price = -1;
+	}
+
+	http.end();
+	return price;
+}
+
 void loop() {
 	char buf[10];
 	int fontType = 6;
 	bool reconnectFlag = false;
 
-	wbtcPrice = getBitcoinPrices();
-	if(wbtcPrice < 0){
+	if(currentCoinDisplayMode == BTC_MODE){
+		coinPrice = getBitcoinPrices();
+	}else if(currentCoinDisplayMode == ETH_MODE){
+		coinPrice = getETHPrices();
+	}
+	
+	if(coinPrice < 0){
 		if(++getPriceErrCount > 3){
 			reconnectFlag = true;
 
@@ -212,14 +288,14 @@ void loop() {
 		fontType = 6;
 		tft.fillScreen(TFT_BLACK);
 		tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-		sprintf(buf, "%.2lf", wbtcPrice);
+		sprintf(buf, "%.2lf", coinPrice);
 	}
 
-	wbtcPriceStr = String(buf);
-	Serial.println(wbtcPriceStr);
+	coinPriceStr = String(buf);
+	Serial.println(coinPriceStr);
 	
-	// tft.drawString(wbtcPriceStr, 20, TFT_WIDTH/2-20, 6);
-	tft.drawCentreString(wbtcPriceStr.c_str(),120,50, fontType);
+	// tft.drawString(coinPriceStr, 20, TFT_WIDTH/2-20, 6);
+	tft.drawCentreString(coinPriceStr.c_str(),120,50, fontType);
 
 	if(reconnectFlag){
 		//重新连接Wifi
