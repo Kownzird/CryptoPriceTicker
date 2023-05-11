@@ -37,13 +37,13 @@ code	color
 #define WIFI_NAME "Redmi K40"
 #define WIFI_PWD "123456789o"
 
+String wifiMsgBuf[10][2] = {
+	{"xxx1","yyy1"},
+	{"xxx2","yyy2"},
+	{"xxx3","yyy3"}
+};
+
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
-
-
-byte omm = 99;
-boolean initial = 1;
-byte xcolon = 0;
-unsigned int colour = 0;
 
 DynamicJsonDocument doc(2048);
 
@@ -54,16 +54,89 @@ String chainShortName = "eth";
 String tokenContractAddress = "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599";
 String oklinkBtcPriceUrl = "https://www.oklink.com/api/v5/explorer/token/token-list?chainShortName=" + chainShortName + "&tokenContractAddress=" + tokenContractAddress;
 
+//获取已存储wifi信息数量
+int getWifiMsgCount(){
+	int index = 0;
+	int capacity = 0;
+
+	//获取wifi信息总容量
+	capacity = sizeof(wifiMsgBuf)/sizeof(wifiMsgBuf[0]);
+
+	for(; index < capacity; index++){
+		if(wifiMsgBuf[index][0] != "\0" && wifiMsgBuf[index][1]!="\0"){
+			continue;
+		}else{
+			break;
+		}
+	}
+
+	return index;
+}
+
 //	WiFi的初始化和连接
 void WiFi_Connect()
 {
-	WiFi.begin(WIFI_NAME, WIFI_PWD);
-	while (WiFi.status() != WL_CONNECTED)
-	{ //这里是阻塞程序，直到连接成功
-		delay(300);
-		Serial.print(".");
-    // tft.drawCentreString(".",0,0,7);
+	int wifiMsgCount = getWifiMsgCount();
+	int index = 0;
+	int timeout = 20;
+	bool connectFlag = false;
+
+	//循环遍历wifi信号
+	for(; index < wifiMsgCount; index++){
+		Serial.printf("Select Wifi: %s\n",wifiMsgBuf[index][0].c_str());
+		WiFi.begin(wifiMsgBuf[index][0].c_str(), wifiMsgBuf[index][1].c_str());
+		while (WiFi.status() != WL_CONNECTED)
+		{
+			connectFlag = true;
+
+			//这里是阻塞程序，直到连接成功
+			delay(300);
+			Serial.print(".");
+
+			tft.fillScreen(TFT_BLACK);
+			tft.setTextColor(0xBDF7, TFT_BLACK);
+			tft.drawString(wifiMsgBuf[index][0], 20, TFT_WIDTH/2-20, 3);
+
+			if((--timeout) <= 0){
+				timeout = 20;
+				connectFlag = false;
+				Serial.println("Connect timeout");
+				break;
+			}
+		}
+
+		if(index >= (wifiMsgCount-1)){
+			//回到首个wifi继续尝试连接
+			index = 0;
+		}
+
+		//未超时，已正常连接
+		if(connectFlag){
+			return;
+		}
+		
 	}
+}
+
+//初始化函数
+void setup(void) {
+  	Serial.begin(115200); // open the serial port at 115200 bps;
+	delay(100);
+
+	tft.init();
+	tft.setRotation(1);
+	tft.fillScreen(TFT_BLACK);
+	tft.setTextColor(TFT_YELLOW, TFT_BLACK); // Note: the new fonts do not draw the background colour
+
+	Serial.print("Connecting..");
+
+	WiFi_Connect();
+
+	Serial.println("\r\nWiFi connected");
+
+	Serial.println("IP address: ");
+	Serial.println(WiFi.localIP());
+
 }
 
 //获取WBTC价格
@@ -99,12 +172,6 @@ double getBitcoinPrices(){
 			JsonVariant wbtcPriceJsonVariant = doc["data"][0]["tokenList"][0]["price"];
 			price = wbtcPriceJsonVariant.as<double>();
 
-			// char buf[10];
-			// sprintf(buf, "%.2lf", wbtcPrice);
-			// wbtcPriceStr = String(buf);
-
-			// Serial.printf("WBTC/USD: %s\r\n",wbtcPriceStr);
-
 		}
 	}
 	else
@@ -117,26 +184,6 @@ double getBitcoinPrices(){
 	return price;
 }
 
-void setup(void) {
-  Serial.begin(115200); // open the serial port at 115200 bps;
-	delay(100);
-
-  tft.init();
-  tft.setRotation(1);
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK); // Note: the new fonts do not draw the background colour
-
-  Serial.print("Connecting..");
-
-	WiFi_Connect();
-
-	Serial.println("WiFi connected");
-
-	Serial.println("IP address: ");
-	Serial.println(WiFi.localIP());
-
-}
-
 void loop() {
 
 	wbtcPrice = getBitcoinPrices();
@@ -147,6 +194,7 @@ void loop() {
 
 
 	Serial.println(wbtcPriceStr);
+	tft.fillScreen(TFT_BLACK);
 	tft.setTextColor(0xFBE0, TFT_BLACK);
 	tft.drawString(wbtcPriceStr, 20, TFT_WIDTH/2-20, 6);
 
