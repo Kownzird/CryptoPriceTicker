@@ -34,12 +34,14 @@ code	color
 #include <HTTPClient.h>
 #include "../lib/ArduinoJson/ArduinoJson.h"
 
+#define VERSION "V1.0.02"
 
-// String wifiMsgBuf[10][2] = {
-// 	{"xxx1","yyy1"},
-// 	{"xxx2","yyy2"},
-// 	{"xxx3","yyy3"}
-// };
+
+String wifiMsgBuf[10][2] = {
+	{"xxx1","yyy1"},
+	{"xxx2","yyy2"},
+	{"xxx3","yyy3"}
+};
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
