@@ -34,20 +34,19 @@ code	color
 #include <HTTPClient.h>
 #include "../lib/ArduinoJson/ArduinoJson.h"
 
-#define WIFI_NAME "Redmi K40"
-#define WIFI_PWD "123456789o"
 
-String wifiMsgBuf[10][2] = {
-	{"xxx1","yyy1"},
-	{"xxx2","yyy2"},
-	{"xxx3","yyy3"}
-};
+// String wifiMsgBuf[10][2] = {
+// 	{"xxx1","yyy1"},
+// 	{"xxx2","yyy2"},
+// 	{"xxx3","yyy3"}
+// };
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
 DynamicJsonDocument doc(2048);
 
-double wbtcPrice = 0; //WBTC价格
+int getPriceErrCount = 0; //获取价格出错次数
+double wbtcPrice = -1; //WBTC价格
 String wbtcPriceStr = "";
 String OK_ACCESS_KEY = "d15a2f3a-a9ce-4714-850e-3dedb66db001";
 String chainShortName = "eth";
@@ -181,7 +180,7 @@ double getBitcoinPrices(){
 	else
 	{
 		Serial.printf("HTTP Get Error: %s\r\n", http.errorToString(httpCode).c_str());
-		price = 0;
+		price = -1;
 	}
 
 	http.end();
@@ -189,19 +188,41 @@ double getBitcoinPrices(){
 }
 
 void loop() {
+	char buf[10];
+	int fontType = 6;
+	bool reconnectFlag = false;
 
 	wbtcPrice = getBitcoinPrices();
+	if(wbtcPrice < 0){
+		if(++getPriceErrCount > 3){
+			reconnectFlag = true;
 
-	char buf[10];
-	sprintf(buf, "%.2lf", wbtcPrice);
+			//重连后，重新计数出错次数
+			getPriceErrCount = 0;
+			
+		}
+
+		fontType = 4;
+		tft.fillScreen(TFT_BLACK);
+		tft.setTextColor(TFT_RED, TFT_BLACK);
+		sprintf(buf, "ERROR");
+	}else{
+		fontType = 6;
+		tft.fillScreen(TFT_BLACK);
+		tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+		sprintf(buf, "%.2lf", wbtcPrice);
+	}
+
 	wbtcPriceStr = String(buf);
-
-
 	Serial.println(wbtcPriceStr);
-	tft.fillScreen(TFT_BLACK);
-	tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+	
 	// tft.drawString(wbtcPriceStr, 20, TFT_WIDTH/2-20, 6);
-	tft.drawCentreString(wbtcPriceStr.c_str(),120,50,6);
+	tft.drawCentreString(wbtcPriceStr.c_str(),120,50, fontType);
+
+	if(reconnectFlag){
+		//重新连接Wifi
+		WiFi_Connect();
+	}
 
 	delay(1000 * 10);
 }
