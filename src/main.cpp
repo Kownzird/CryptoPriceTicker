@@ -154,8 +154,10 @@ void changeCoinDisplayMode(){
 
 		if(digitalRead(KEY35) == LOW){
 
-			//切换显示模式标志位
-			Serial.println("change Display Mode");
+			//上一次中断后的处理流程未结束
+			if(lastCoinDisplayMode != currentCoinDisplayMode){
+				return;
+			}
 
 			// tft.fillScreen(TFT_BLACK);
 			// tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -393,6 +395,7 @@ start:
 	lv_obj_add_style(label, &style, 0);
     lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
 	lv_label_set_text( label, coinPriceStr.c_str() );
+	lastCoinDisplayMode = currentCoinDisplayMode;
 
 	//重新连接Wifi
 	if(reconnectFlag){
@@ -407,7 +410,6 @@ start:
 	for(int i=0; i<(SELF_REFRESH_TIME_SECONDS*1000/SELF_REFRESH_INTERVAL_MILLISECONDS); i++){
 		delay(SELF_REFRESH_INTERVAL_MILLISECONDS);
 		if(lastCoinDisplayMode != currentCoinDisplayMode){
-			lastCoinDisplayMode = currentCoinDisplayMode;
 			break;
 		}
 	}
