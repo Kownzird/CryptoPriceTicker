@@ -1,11 +1,9 @@
-#include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
 #include <SPI.h>
-#include <lvgl.h>
-#include <misc/lv_style.h>
-// #include <font/lv_font.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "../lib/ArduinoJson/ArduinoJson.h"
+#include "../lib/TFT_eSPI/TFT_eSPI.h" // Graphics and font library for ST7735 driver chip
+#include "../lib/lvgl/lvgl.h"
 
 #define VERSION "v1.0.02"
 #define LV_USE_LOG 0
