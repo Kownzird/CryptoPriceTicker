@@ -11,6 +11,8 @@
 #define LV_USE_LOG 0
 
 #define KEY35 35
+#define SELF_REFRESH_TIME_SECONDS 10
+#define SELF_REFRESH_INTERVAL_MILLISECONDS 500
 
 #define BTC_MODE  1
 #define ETH_MODE  2
@@ -366,7 +368,7 @@ start:
 
 		//设置ETH价格颜色
 		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_GREY));
-		
+
 	}
 	
 	if(coinPrice < 0){
@@ -395,18 +397,21 @@ start:
 	//重新连接Wifi
 	if(reconnectFlag){
 		WiFi_Connect();
+		lv_obj_remove_style_all(label);
+		reconnectFlag = false;
 		goto start;
 	}
 
 	lv_timer_handler();
 
-	for(int i=0; i<10; i++){
-		delay(1000);
+	for(int i=0; i<(SELF_REFRESH_TIME_SECONDS*1000/SELF_REFRESH_INTERVAL_MILLISECONDS); i++){
+		delay(SELF_REFRESH_INTERVAL_MILLISECONDS);
 		if(lastCoinDisplayMode != currentCoinDisplayMode){
 			lastCoinDisplayMode = currentCoinDisplayMode;
 			break;
 		}
 	}
+	lv_obj_remove_style_all(label);
 }
 
 
