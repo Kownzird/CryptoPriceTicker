@@ -5,7 +5,7 @@
 #include "../lib/TFT_eSPI/TFT_eSPI.h" // Graphics and font library for ST7735 driver chip
 #include "../lib/lvgl/lvgl.h"
 
-#define VERSION "v1.0.02"
+#define VERSION "v1.0.03"
 #define LV_USE_LOG 0
 
 #define KEY35 35
