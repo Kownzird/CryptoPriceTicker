@@ -1,32 +1,24 @@
 #include <SPI.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include "../lib/ArduinoJson/ArduinoJson.h"
 #include "../lib/TFT_eSPI/TFT_eSPI.h" // Graphics and font library for ST7735 driver chip
 #include "../lib/lvgl/lvgl.h"
+
+#include "wifiUser.h"
+#include "getPriceAPI.h"
 
 #define VERSION "v1.0.03"
 #define LV_USE_LOG 0
 
 #define KEY35 35
+#define KEY0  0
 #define SELF_REFRESH_TIME_SECONDS 10
 #define SELF_REFRESH_INTERVAL_MILLISECONDS 500
 
 #define BTC_MODE  1
 #define ETH_MODE  2
 
-#define OK_ACCESS_KEY "d15a2f3a-a9ce-4714-850e-3dedb66db001"
-#define WBTC_TOKEN_CONTRACT_ADDRESS "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
-#define STETH_TOKEN_CONTRACT_ADDRESS "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
-#define OKLINK_TOKENLIST_URL_BASE "https://www.oklink.com/api/v5/explorer/token/token-list?"
 
 
-
-String wifiMsgBuf[10][2] = {
-	{"xxx1","yyy1"},
-	{"xxx2","yyy2"},
-	{"xxx3","yyy3"}
-};
 
 static const uint16_t screenWidth  = TFT_HEIGHT;
 static const uint16_t screenHeight = TFT_WIDTH;
@@ -38,14 +30,13 @@ lv_obj_t *logoImg = NULL;
 lv_obj_t *label = NULL;
 static lv_style_t style;
 
-DynamicJsonDocument doc(2048);
 
 int getPriceErrCount = 0; //获取价格出错次数
 double coinPrice = -1; //WBTC价格
 String coinPriceStr = "";
-String chainShortName = "eth";
 int currentCoinDisplayMode = BTC_MODE;
 int lastCoinDisplayMode = BTC_MODE;
+bool restoreWifiFlag = false;
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
@@ -59,8 +50,7 @@ void my_print(const char * buf)
 #endif
 
 /* Display flushing */
-void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p )
-{
+void myDispFlush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p ){
     uint32_t w = ( area->x2 - area->x1 + 1 );
     uint32_t h = ( area->y2 - area->y1 + 1 );
 
@@ -72,74 +62,6 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
     lv_disp_flush_ready( disp );
 }
 
-//获取已存储wifi信息数量
-int getWifiMsgCount(){
-	int index = 0;
-	int capacity = 0;
-
-	//获取wifi信息总容量
-	capacity = sizeof(wifiMsgBuf)/sizeof(wifiMsgBuf[0]);
-
-	for(; index < capacity; index++){
-		if(wifiMsgBuf[index][0] != "\0" && wifiMsgBuf[index][1]!="\0"){
-			continue;
-		}else{
-			break;
-		}
-	}
-
-	return index;
-}
-
-//	WiFi的初始化和连接
-void WiFi_Connect()
-{
-	int wifiMsgCount = getWifiMsgCount();
-	int index = 0;
-	int timeout = 20;
-	bool connectFlag = false;
-
-	//循环遍历wifi信号
-	for(; index < wifiMsgCount; index++){
-		Serial.printf("Select Wifi: %s\n",wifiMsgBuf[index][0].c_str());
-
-		//清屏
-		tft.fillScreen(TFT_BLACK);
-		WiFi.begin(wifiMsgBuf[index][0].c_str(), wifiMsgBuf[index][1].c_str());
-		while (WiFi.status() != WL_CONNECTED)
-		{
-			connectFlag = true;
-
-			//这里是阻塞程序，直到连接成功
-			delay(300);
-			Serial.print(".");
-			
-			tft.setTextColor(TFT_WHITE, TFT_BLACK);
-			tft.drawCentreString("Connect WIFI",120,30,2);
-      		tft.drawCentreString(wifiMsgBuf[index][0].c_str(),120,60,4);
-
-			if((--timeout) <= 0){
-				timeout = 20;
-				connectFlag = false;
-				Serial.println("Connect timeout");
-				break;
-			}
-		}
-
-		if(index >= (wifiMsgCount-1)){
-			Serial.println("index = 0");
-			//回到首个wifi继续尝试连接
-			index = -1;
-		}
-
-		//未超时，已正常连接
-		if(connectFlag){
-			tft.fillScreen(TFT_BLACK);
-			return;
-		}
-		
-	}
-}
 
 //KEY35中断处理函数
 void changeCoinDisplayMode(){
@@ -165,8 +87,8 @@ void changeCoinDisplayMode(){
 				// tft.drawCentreString("ETH  MODE",120,60,4);
 
 				//显示BTC LOGO
-				LV_IMG_DECLARE(ETH_Logo_50x50);
-				lv_img_set_src(logoImg, &ETH_Logo_50x50);
+				LV_IMG_DECLARE(ETH_Logo_ARRAY);
+				lv_img_set_src(logoImg, &ETH_Logo_ARRAY);
 				lv_obj_set_pos(logoImg, 15, 42);
 
 				lv_style_set_text_font(&style, &lv_font_montserrat_20);
@@ -178,8 +100,8 @@ void changeCoinDisplayMode(){
 			}else{
 				currentCoinDisplayMode = BTC_MODE;
 				//显示BTC LOGO
-				LV_IMG_DECLARE(BTC_Logo_50x50);
-				lv_img_set_src(logoImg, &BTC_Logo_50x50);
+				LV_IMG_DECLARE(BTC_Logo_ARRAY);
+				lv_img_set_src(logoImg, &BTC_Logo_ARRAY);
 				lv_obj_set_pos(logoImg, 15, 42);
 
 				lv_style_set_text_font(&style, &lv_font_montserrat_20);
@@ -193,23 +115,35 @@ void changeCoinDisplayMode(){
 	}
 }
 
+//KEY0中断处理函数
+void restoreWIFIMessage(){
+	restoreWifiFlag = true;
+}
+
+
 //初始化函数
 void setup(void) {
-	//初始化PIN35按键,设置为上拉输入
+	//初始化PIN35,PIN0按键,设置为上拉输入
 	pinMode(KEY35, INPUT_PULLUP);
+	pinMode(KEY0, INPUT_PULLUP);
+
 	//绑定币种切换显示模式函数，下降沿触发
 	attachInterrupt(digitalPinToInterrupt(KEY35), changeCoinDisplayMode, FALLING);
+	//绑定清除网络配置函数，下降沿触发
+	attachInterrupt(digitalPinToInterrupt(KEY0), restoreWIFIMessage, FALLING);
 
 	//初始化串口，波特率115200
   	Serial.begin(115200); 
 	delay(100);
 
+	//TFT屏初始化
 	tft.init();
 	tft.setRotation(1);
 	tft.fillScreen(TFT_BLACK);
 	tft.setTextColor(TFT_YELLOW, TFT_BLACK);
 
-	lv_init();    // 初始化 LVGL 库
+	// 初始化LVGL库
+	lv_init();    
 #if LV_USE_LOG != 0
     lv_log_register_print_cb( my_print ); /* register print function for debugging */
 #endif
@@ -222,7 +156,7 @@ void setup(void) {
 
     disp_drv.hor_res = screenWidth;
     disp_drv.ver_res = screenHeight;
-    disp_drv.flush_cb = my_disp_flush;   // 设置刷新回调函数
+    disp_drv.flush_cb = myDispFlush;   // 设置刷新回调函数
     disp_drv.draw_buf = &draw_buf;   // 设置缓冲区
     lv_disp_drv_register( &disp_drv ); // 注册驱动程序
 
@@ -239,106 +173,12 @@ void setup(void) {
 	//初始化样式
     lv_style_init(&style);
 
-
-	Serial.print("Connecting..");
-	WiFi_Connect();
-	Serial.println("\r\nWiFi connected");
-
-	Serial.println("IP address: ");
-	Serial.println(WiFi.localIP());
-
+	//连接网络
+	connectToWiFi(15);
 }
 
-//获取WBTC价格
-double getBitcoinPrices(){
-	HTTPClient http;
-	double price = 0;
 
-	String wbtcTokenListUrl = (String)OKLINK_TOKENLIST_URL_BASE + "chainShortName=" + chainShortName + "&tokenContractAddress=" + WBTC_TOKEN_CONTRACT_ADDRESS;
-
-	http.begin(wbtcTokenListUrl);
-
-	http.addHeader("Cookie", "aliyungf_tc=512e21b79e058e7ce565360b7ba5ff90d0c7a752b3e50b6c2a8e276264b02f8e; locale=en_US"); // 添加自定义 header
-	http.addHeader("Host", "oklink.com");
-	http.addHeader("User-Agent", "PostmanRuntime/7.29.0");
-	http.addHeader("Accept", "*/*");
-	http.addHeader("Accept-Encoding", "gzip, deflate, br");
-	http.addHeader("Connection", "keep-alive");
-	http.addHeader("Ok-Access-Key", "d15a2f3a-a9ce-4714-850e-3dedb66db001");
-	int httpCode = http.GET();
-
-	if (httpCode > 0)
-	{
-		// httpCode will be negative on error
-		// Serial.printf("HTTP Get Code: %d\r\n", httpCode);
-
-		if (httpCode == HTTP_CODE_OK) // 收到正确的内容
-		{
-			String resBuff = http.getString();
-
-			// Serial.println(resBuff);
-
-			//	使用ArduinoJson_6.x版本，具体请移步：https://github.com/bblanchon/ArduinoJson
-			deserializeJson(doc, resBuff); //开始使用Json解析
-			
-			JsonVariant wbtcPriceJsonVariant = doc["data"][0]["tokenList"][0]["price"];
-			price = wbtcPriceJsonVariant.as<double>();
-
-		}
-	}
-	else
-	{
-		Serial.printf("HTTP Get Error: %s\r\n", http.errorToString(httpCode).c_str());
-		price = -1;
-	}
-
-	http.end();
-	return price;
-}
-
-//获取stETH价格
-double getETHPrices(){
-	HTTPClient http;
-	double price = 0;
-
-	String stETHTokenListUrl = (String)OKLINK_TOKENLIST_URL_BASE + "chainShortName=" + chainShortName + "&tokenContractAddress=" + STETH_TOKEN_CONTRACT_ADDRESS;
-
-	http.begin(stETHTokenListUrl);
-
-	http.addHeader("Cookie", "aliyungf_tc=512e21b79e058e7ce565360b7ba5ff90d0c7a752b3e50b6c2a8e276264b02f8e; locale=en_US"); // 添加自定义 header
-	http.addHeader("Host", "oklink.com");
-	http.addHeader("User-Agent", "PostmanRuntime/7.29.0");
-	http.addHeader("Accept", "*/*");
-	http.addHeader("Accept-Encoding", "gzip, deflate, br");
-	http.addHeader("Connection", "keep-alive");
-	http.addHeader("Ok-Access-Key", "d15a2f3a-a9ce-4714-850e-3dedb66db001");
-	int httpCode = http.GET();
-
-	if (httpCode > 0)
-	{
-		if (httpCode == HTTP_CODE_OK) // 收到正确的内容
-		{
-			String resBuff = http.getString();
-
-			//	使用ArduinoJson_6.x版本，具体请移步：https://github.com/bblanchon/ArduinoJson
-			deserializeJson(doc, resBuff); //开始使用Json解析
-			
-			JsonVariant stETHPriceJsonVariant = doc["data"][0]["tokenList"][0]["price"];
-			price = stETHPriceJsonVariant.as<double>();
-
-		}
-	}
-	else
-	{
-		Serial.printf("HTTP Get Error: %s\r\n", http.errorToString(httpCode).c_str());
-		price = -1;
-	}
-
-	http.end();
-	return price;
-}
-
-void loop() {
+void loop(){
 start:
 
 	static char buf[10];
@@ -351,8 +191,8 @@ start:
 		coinPrice = getBitcoinPrices();
 
 		//显示BTC LOGO
-		LV_IMG_DECLARE(BTC_Logo_50x50);
-		lv_img_set_src(logoImg, &BTC_Logo_50x50);
+		LV_IMG_DECLARE(BTC_Logo_ARRAY);
+		lv_img_set_src(logoImg, &BTC_Logo_ARRAY);
 		lv_obj_set_pos(logoImg, 15, 42);
 
 		//设置BTC价格颜色
@@ -362,13 +202,12 @@ start:
 		coinPrice = getETHPrices();
 
 		//显示ETH LOGO
-		LV_IMG_DECLARE(ETH_Logo_50x50);
-		lv_img_set_src(logoImg, &ETH_Logo_50x50);
+		LV_IMG_DECLARE(ETH_Logo_ARRAY);
+		lv_img_set_src(logoImg, &ETH_Logo_ARRAY);
 		lv_obj_set_pos(logoImg, 15, 42);
 
 		//设置ETH价格颜色
 		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_GREY));
-
 	}
 	
 	if(coinPrice < 0){
@@ -397,7 +236,8 @@ start:
 
 	//重新连接Wifi
 	if(reconnectFlag){
-		WiFi_Connect();
+		// WiFi_Connect();
+		connectToWiFi(15);
 		lv_obj_remove_style_all(label);
 		reconnectFlag = false;
 		goto start;
@@ -410,8 +250,31 @@ start:
 		if(lastCoinDisplayMode != currentCoinDisplayMode){
 			break;
 		}
+
+		if(restoreWifiFlag){
+			for(int i=0; i< 3 * 5; i++){
+				if(digitalRead(KEY0) == LOW){
+					Serial.println("KEY0 is press");
+					delay(200);
+				}else{
+					//未达到3秒
+					restoreWifiFlag = false;
+					goto end_rst_wifi;
+				}
+			}
+			
+			//达到3秒，清除网络配置并重启
+			deleteWifiConfig();
+			restoreWiFi();
+			ESP.restart();
+		}
+end_rst_wifi:
+		;
 	}
+
 	lv_obj_remove_style_all(label);
+	checkDNS_HTTP();                  //检测客户端DNS&HTTP请求，也就是检查配网页面那部分
+	checkConnect(true);               //检测网络连接状态，参数true表示如果断开重新连接
 }
 
 
