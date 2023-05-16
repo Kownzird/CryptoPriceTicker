@@ -2,9 +2,10 @@
 #include "esp_spiffs.h"
 #include <String.h>
 #include <SPIFFS.h>
+#include <string.h>
+#include "../lib/lvgl/lvgl.h"
 
-int connectTimeOut_s = 15;
- 
+int connectTimeOut_s = 15;                 //网络连接超时时间
 const byte DNS_PORT = 53;                  //设置DNS端口号
 const int webPort = 80;                    //设置Web端口号
 
@@ -15,7 +16,13 @@ String scanNetworksID = "";                //用于储存扫描到的WiFi ID
 IPAddress apIP(192, 168, 4, 1);            //设置AP的IP地址 192.168.4.1
 String wifi_ssid = "";                     //暂时存储wifi账号密码
 String wifi_pass = "";                     //暂时存储wifi账号密码
+String wifi_ssid_ap = "";                  //暂时存储AP模式接收的wifi账号密码
+String wifi_pass_ap = "";                  //暂时存储AP模式接收的wifi账号密码
 
+extern lv_obj_t *logoImg;
+extern lv_obj_t *label;
+extern lv_obj_t *label;
+extern lv_style_t style;
 
 void writeWifiConfig(String ssid, String password){
     if (SPIFFS.begin(true)) {
@@ -28,7 +35,7 @@ void writeWifiConfig(String ssid, String password){
         // 写入wifi账号和密码到文件中
         configFile.print("ssid=");
         configFile.print(ssid);
-        configFile.print(" password=");
+        configFile.print(";password=");
         configFile.println(password);
         configFile.flush();
         configFile.close();
@@ -72,7 +79,7 @@ void handleConfigWifi(){               //返回http状态
     if (server.hasArg("ssid")){          //判断是否有账号参数
         Serial.print("get ssid:");
         wifi_ssid = server.arg("ssid");   //获取html表单输入框name名为"ssid"的内容
-    
+        wifi_ssid_ap = wifi_ssid;
         Serial.println(wifi_ssid);
     }else{                                //没有参数
         Serial.println("error, not found ssid");
@@ -84,6 +91,7 @@ void handleConfigWifi(){               //返回http状态
     if (server.hasArg("pass")){
         Serial.print("get password:");
         wifi_pass = server.arg("pass");  //获取html表单输入框name名为"pwd"的内容
+        wifi_pass_ap = wifi_pass;
         Serial.println(wifi_pass);
     }else{
         Serial.println("error, not found password");
@@ -120,6 +128,20 @@ void handleNotFound(){           // 当浏览器请求的网络资源无法在�
 void initSoftAP(){
     WiFi.mode(WIFI_AP);                                           //配置为AP模式
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));   //设置AP热点IP和子网掩码
+
+    //显示WIFI AP LOGO
+    LV_IMG_DECLARE(WiFi_AP_Logo_ARRAY);
+    lv_img_set_src(logoImg, &WiFi_AP_Logo_ARRAY);
+    lv_obj_set_pos(logoImg, 15, 42);
+    
+    lv_style_set_text_font(&style, &lv_font_montserrat_20);
+    lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_BLUE));
+
+    lv_obj_add_style(label, &style, 0);
+    lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
+    lv_label_set_text( label, "AP  MODE");
+    lv_timer_handler();
+
     if (WiFi.softAP(AP_SSID, AP_PWD)){                                     //开启AP热点,如需要密码则添加第二个参数                       
         //打印相关信息
         Serial.println("ESP-32S SoftAP is right.");
@@ -207,13 +229,30 @@ void connectToWiFi(int timeOut_s){
     WiFi.hostname(HOST_NAME);   //设置设备名
 
     WiFi.mode(WIFI_STA);        //设置为STA模式并连接WIFI
-    WiFi.setAutoConnect(true);  //设置自动连接    
+    WiFi.setAutoConnect(true);  //设置自动连接 
+
+    Serial.println("Show Logo");
+
+    //显示WIFI STA LOGO
+    LV_IMG_DECLARE(WiFi_STA_Logo_ARRAY);
+    lv_img_set_src(logoImg, &WiFi_STA_Logo_ARRAY);
+    lv_obj_set_pos(logoImg, 15, 42);
+    
+    lv_style_set_text_font(&style, &lv_font_montserrat_20);
+    lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_BLUE));
+
+    lv_obj_add_style(label, &style, 0);
+    lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
+    lv_label_set_text( label, "STA  MODE");
+    lv_timer_handler();
 
     if (wifi_ssid != ""){       //wifi_ssid不为空，意味着从网页读取到wifi
         Serial.println("Read wifi cinfugure message in WEB");
         WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str()); //c_str(),获取该字符串的指针
-        // wifi_ssid = "";
-        // wifi_pass = "";
+
+        //设置为空，配网后可跳转到SPIFFS查询历史wifi信息
+        wifi_ssid = "";
+        wifi_pass = "";
     }else{
         Serial.println("Read wifi configure file in SPIFFS\r\n");
 
@@ -226,80 +265,62 @@ void connectToWiFi(int timeOut_s){
                 String fileContent = configFile.readString();
                 configFile.close();
 
-                String lines[fileContent.length()];
-
-                //获取行数
-                int numLines = 0;
                 char buf[fileContent.length() + 1]; // 加上字符串结尾符的长度
                 fileContent.toCharArray(buf, sizeof(buf));
                 Serial.printf("[INFO] File content:\r\n%s\r\n\n",buf);
+
+                char *ssid_value = NULL;
+                char *password_value = NULL;
+                char *token = NULL, *next_token=NULL;
+                const char *delim = ";=\r\n";
                 
-                char *line = strtok(buf, "\n");
-                while (line != NULL) {
-                    line[strcspn(line, "\r")] = '\0'; // 去除回车符，防止产生意外的 bug
-                    // 在这里对每一行内容进行处理……
-                    numLines++;
-                    line = strtok(NULL, "\n");
+                //配置信息不为空，读取里面词条信息
+                if(strlen(buf)!=0){
+                    token = strtok_r(buf, delim, &next_token);
                 }
-                Serial.printf("[INFO] File lines %d\r\n",numLines);
+                
+                while(token != NULL) {
+                    if (strcmp(token, "ssid") == 0) { // 找到ssid字段
+                        token = strtok_r(NULL, delim, &next_token); // 获取ssid对应的值
+                        Serial.printf("SSID=%s\r\n",token); // 打印ssid的值
+                        ssid_value = token;
+                    } else if (strcmp(token, "password") == 0) { // 找到password字段
+                        token = strtok_r(NULL, delim, &next_token); // 获取password对应的值
+                        Serial.printf("PWD=%s\r\n",token); // 打印password的值并且输出空格隔开下一个组合
+                        password_value = token;
 
-                char* str_line = NULL;
-                char* ssid_ptr = NULL;
-                char* password_ptr = NULL;
+                        Serial.printf("SSID=%s PWD=%s\r\n",ssid_value,password_value);
 
-                // 第一次执行初始化
-                str_line = strtok(buf, "\r\n");
-                for (int i = 0; i < numLines; i++) {
+                        if(ssid_value != NULL && password_value != NULL && !isConnected) {
+                            Serial.print("[INFO] Connecting WiFi: ");
+                            Serial.println(ssid_value);
+                            WiFi.begin(ssid_value, password_value);
 
-                    // 将分割和处理字符串的操作放入循环内
-                    ssid_ptr = strtok(str_line, " =");
-                    password_ptr = strtok(NULL, " =");
+                            lv_label_set_text( label, ssid_value);
+                            lv_timer_handler();
 
-                    char *ssid_value = NULL;
-                    char *password_value = NULL;
-
-                    // Serial.printf("ssid_ptr=%s password_ptr=%s\r\n", ssid_ptr, password_ptr);
-
-                    while (ssid_ptr && password_ptr) {
-                        if (strcmp(ssid_ptr, "ssid") == 0) {
-                            Serial.print("SSID: ");
-                            Serial.println(password_ptr); // 输出 ssid 的值
-                            ssid_value = password_ptr;
-                        } else if (strcmp(ssid_ptr, "password") == 0) {
-                            Serial.print("Password: ");
-                            Serial.println(password_ptr); // 输出 password 的值
-                            password_value = password_ptr;
-                        }
-                        ssid_ptr = strtok(NULL, " =");
-                        password_ptr = strtok(NULL, " =");
-                    }
-
-                    Serial.printf("ssid_value=%s password_value=%s\r\n", ssid_value, password_value);
-
-                    if (ssid_value != NULL && password_value != NULL && !isConnected) {
-                        Serial.print("[INFO] Connecting WiFi: ");
-                        Serial.println(ssid_value);
-                        WiFi.begin(ssid_value, password_value);
-                        delay(500);
-                        for (int j = 0; j < 20 && WiFi.status() != WL_CONNECTED; j++) {
-                            Serial.print(".");
                             delay(500);
-                        }
-                        if (WiFi.status() == WL_CONNECTED) {
-                            isConnected = true;
-                            wifi_ssid = ssid_value;
-                            wifi_pass = password_value;
-                            Serial.println("");
-                            Serial.print("[INFO] Connected seccessful,SSID: ");
-                            Serial.print(WiFi.SSID());
+                            for (int j = 0; j < 20 && WiFi.status() != WL_CONNECTED; j++) {
+                                Serial.print(".");
+                                delay(500);
+                            }
+                            if (WiFi.status() == WL_CONNECTED) {
+                                isConnected = true;
+                                wifi_ssid = ssid_value;
+                                wifi_pass = password_value;
+                                Serial.println("");
+                                Serial.print("[INFO] Connected seccessful,SSID: ");
+                                Serial.print(WiFi.SSID());
 
-                            break;
+                                break;
+                            }
                         }
+                    } else {
+                        token = strtok_r(NULL, delim, &next_token); // 跳过其他字段(比如换行符)
                     }
-
-                    str_line = strtok(NULL, "\r\n"); // 指向下一行
                 }
 
+                //匹配不上存储的wifi信息，准备开启AP配网模式
                 if (!isConnected) {
                     Serial.println("");
                     Serial.println("[INFO] Connected fail,please configure Wi-Fi");
@@ -310,7 +331,7 @@ void connectToWiFi(int timeOut_s){
                     }
 
                     //配网连接上网络，保存WIFI信号后返回
-                    writeWifiConfig(wifi_ssid, wifi_pass);
+                    writeWifiConfig(wifi_ssid_ap, wifi_pass_ap);
                     return;
                 }
 
@@ -327,13 +348,17 @@ void connectToWiFi(int timeOut_s){
             }
 
             //配网连接上网络，保存WIFI信号后返回
-            writeWifiConfig(wifi_ssid, wifi_pass);
+            writeWifiConfig(wifi_ssid_ap, wifi_pass_ap);
             return;
         }
     }
 
     int Connect_time = 0;                       //用于连接计时，如果长时间连接不成功，复位设备
     while (WiFi.status() != WL_CONNECTED){      //等待WIFI连接成功 
+
+        lv_label_set_text( label, wifi_ssid_ap.c_str() );
+        lv_timer_handler();
+
         Serial.print(".");                      //一共打印30个点点  
         delay(500);
         Connect_time ++;
@@ -362,6 +387,10 @@ void connectToWiFi(int timeOut_s){
         Serial.print("WIFI status is:");
         Serial.print(WiFi.status());
         server.stop();                            //停止开发板所建立的网络服务器。
+
+        //设置为空，断网后可跳转到SPIFFS查询历史wifi信息
+        wifi_ssid = "";
+        wifi_pass = "";
     }
 }
  
