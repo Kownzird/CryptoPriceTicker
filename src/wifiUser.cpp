@@ -2,6 +2,7 @@
 #include "esp_spiffs.h"
 #include <String.h>
 #include <SPIFFS.h>
+#include <string.h>
 
 int connectTimeOut_s = 15;
  
@@ -28,7 +29,7 @@ void writeWifiConfig(String ssid, String password){
         // 写入wifi账号和密码到文件中
         configFile.print("ssid=");
         configFile.print(ssid);
-        configFile.print(" password=");
+        configFile.print(";password=");
         configFile.println(password);
         configFile.flush();
         configFile.close();
@@ -225,81 +226,62 @@ void connectToWiFi(int timeOut_s){
             if (configFile) {
                 String fileContent = configFile.readString();
                 configFile.close();
-
-                String lines[fileContent.length()];
-
-                //获取行数
-                int numLines = 0;
+                
                 char buf[fileContent.length() + 1]; // 加上字符串结尾符的长度
                 fileContent.toCharArray(buf, sizeof(buf));
                 Serial.printf("[INFO] File content:\r\n%s\r\n\n",buf);
+
+                char *ssid_value = NULL;
+                char *password_value = NULL;
+                char *token = NULL, *next_token=NULL;
+                const char *delim = ";=\r\n";
                 
-                char *line = strtok(buf, "\n");
-                while (line != NULL) {
-                    line[strcspn(line, "\r")] = '\0'; // 去除回车符，防止产生意外的 bug
-                    // 在这里对每一行内容进行处理……
-                    numLines++;
-                    line = strtok(NULL, "\n");
+                //配置信息不为空，读取里面词条信息
+                if(strlen(buf)!=0){
+                    Serial.println("Ready to parse token");
+                    token = strtok_r(buf, delim, &next_token);
+                    Serial.printf("token=%s\r\n",token);
                 }
-                Serial.printf("[INFO] File lines %d\r\n",numLines);
+                
+                while(token != NULL) {
+                    Serial.printf("In while: token=%s\r\n",token);
+                    if (strcmp(token, "ssid") == 0) { // 找到ssid字段
+                        token = strtok_r(NULL, delim, &next_token); // 获取ssid对应的值
+                        Serial.printf("SSID=%s\r\n",token); // 打印ssid的值
+                        ssid_value = token;
+                    } else if (strcmp(token, "password") == 0) { // 找到password字段
+                        token = strtok_r(NULL, delim, &next_token); // 获取password对应的值
+                        Serial.printf("PWD=%s\r\n",token); // 打印password的值并且输出空格隔开下一个组合
+                        password_value = token;
 
-                char* str_line = NULL;
-                char* ssid_ptr = NULL;
-                char* password_ptr = NULL;
+                        Serial.printf("SSID=%s PWD=%s\r\n",ssid_value,password_value);
 
-                // 第一次执行初始化
-                str_line = strtok(buf, "\r\n");
-                for (int i = 0; i < numLines; i++) {
-
-                    // 将分割和处理字符串的操作放入循环内
-                    ssid_ptr = strtok(str_line, " =");
-                    password_ptr = strtok(NULL, " =");
-
-                    char *ssid_value = NULL;
-                    char *password_value = NULL;
-
-                    // Serial.printf("ssid_ptr=%s password_ptr=%s\r\n", ssid_ptr, password_ptr);
-
-                    while (ssid_ptr && password_ptr) {
-                        if (strcmp(ssid_ptr, "ssid") == 0) {
-                            Serial.print("SSID: ");
-                            Serial.println(password_ptr); // 输出 ssid 的值
-                            ssid_value = password_ptr;
-                        } else if (strcmp(ssid_ptr, "password") == 0) {
-                            Serial.print("Password: ");
-                            Serial.println(password_ptr); // 输出 password 的值
-                            password_value = password_ptr;
-                        }
-                        ssid_ptr = strtok(NULL, " =");
-                        password_ptr = strtok(NULL, " =");
-                    }
-
-                    Serial.printf("ssid_value=%s password_value=%s\r\n", ssid_value, password_value);
-
-                    if (ssid_value != NULL && password_value != NULL && !isConnected) {
-                        Serial.print("[INFO] Connecting WiFi: ");
-                        Serial.println(ssid_value);
-                        WiFi.begin(ssid_value, password_value);
-                        delay(500);
-                        for (int j = 0; j < 20 && WiFi.status() != WL_CONNECTED; j++) {
-                            Serial.print(".");
+                        if(ssid_value != NULL && password_value != NULL && !isConnected) {
+                            Serial.print("[INFO] Connecting WiFi: ");
+                            Serial.println(ssid_value);
+                            WiFi.begin(ssid_value, password_value);
                             delay(500);
-                        }
-                        if (WiFi.status() == WL_CONNECTED) {
-                            isConnected = true;
-                            wifi_ssid = ssid_value;
-                            wifi_pass = password_value;
-                            Serial.println("");
-                            Serial.print("[INFO] Connected seccessful,SSID: ");
-                            Serial.print(WiFi.SSID());
+                            for (int j = 0; j < 20 && WiFi.status() != WL_CONNECTED; j++) {
+                                Serial.print(".");
+                                delay(500);
+                            }
+                            if (WiFi.status() == WL_CONNECTED) {
+                                isConnected = true;
+                                wifi_ssid = ssid_value;
+                                wifi_pass = password_value;
+                                Serial.println("");
+                                Serial.print("[INFO] Connected seccessful,SSID: ");
+                                Serial.print(WiFi.SSID());
 
-                            break;
+                                break;
+                            }
                         }
+                    } else {
+                        token = strtok_r(NULL, delim, &next_token); // 跳过其他字段(比如换行符)
                     }
-
-                    str_line = strtok(NULL, "\r\n"); // 指向下一行
                 }
 
+                //匹配不上存储的wifi信息，准备开启AP配网模式
                 if (!isConnected) {
                     Serial.println("");
                     Serial.println("[INFO] Connected fail,please configure Wi-Fi");
