@@ -28,7 +28,7 @@ static lv_color_t buf[ screenHeight*screenWidth / 10 ];
 
 lv_obj_t *logoImg = NULL;
 lv_obj_t *label = NULL;
-static lv_style_t style;
+lv_style_t style;
 
 
 int getPriceErrCount = 0; //获取价格出错次数
