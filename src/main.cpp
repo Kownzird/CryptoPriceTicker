@@ -236,8 +236,7 @@ start:
 
 	//重新连接Wifi
 	if(reconnectFlag){
-		// WiFi_Connect();
-		connectToWiFi(15);
+		checkConnect(true);
 		lv_obj_remove_style_all(label);
 		reconnectFlag = false;
 		goto start;

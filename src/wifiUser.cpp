@@ -213,8 +213,10 @@ void connectToWiFi(int timeOut_s){
     if (wifi_ssid != ""){       //wifi_ssid不为空，意味着从网页读取到wifi
         Serial.println("Read wifi cinfugure message in WEB");
         WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str()); //c_str(),获取该字符串的指针
-        // wifi_ssid = "";
-        // wifi_pass = "";
+
+        //设置为空，网络断连后可跳转到SPIFFS查询历史wifi信息
+        wifi_ssid = "";
+        wifi_pass = "";
     }else{
         Serial.println("Read wifi configure file in SPIFFS\r\n");
 
@@ -226,7 +228,7 @@ void connectToWiFi(int timeOut_s){
             if (configFile) {
                 String fileContent = configFile.readString();
                 configFile.close();
-                
+
                 char buf[fileContent.length() + 1]; // 加上字符串结尾符的长度
                 fileContent.toCharArray(buf, sizeof(buf));
                 Serial.printf("[INFO] File content:\r\n%s\r\n\n",buf);
