@@ -214,7 +214,7 @@ void connectToWiFi(int timeOut_s){
         Serial.println("Read wifi cinfugure message in WEB");
         WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str()); //c_str(),获取该字符串的指针
 
-        //设置为空，网络断连后可跳转到SPIFFS查询历史wifi信息
+        //设置为空，配网后可跳转到SPIFFS查询历史wifi信息
         wifi_ssid = "";
         wifi_pass = "";
     }else{
@@ -346,6 +346,11 @@ void connectToWiFi(int timeOut_s){
         Serial.print("WIFI status is:");
         Serial.print(WiFi.status());
         server.stop();                            //停止开发板所建立的网络服务器。
+
+        //设置为空，断网后可跳转到SPIFFS查询历史wifi信息
+        wifi_ssid = "";
+        wifi_pass = "";
+
     }
 }
  
