@@ -16,6 +16,7 @@
 
 #define BTC_MODE  1
 #define ETH_MODE  2
+#define BNB_MODE  3
 
 
 
@@ -97,7 +98,22 @@ void changeCoinDisplayMode(){
 				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
 				lv_label_set_text( label, "ETH  MODE");
 				lv_timer_handler();
-			}else{
+			}else if(currentCoinDisplayMode == ETH_MODE){
+				currentCoinDisplayMode = BNB_MODE;
+
+				//显示BNB LOGO
+				LV_IMG_DECLARE(BNB_Logo_ARRAY);
+				lv_img_set_src(logoImg, &BNB_Logo_ARRAY);
+				lv_obj_set_pos(logoImg, 15, 42);
+
+				lv_style_set_text_font(&style, &lv_font_montserrat_20);
+				lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_YELLOW));
+				lv_obj_add_style(label, &style, 0);
+				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
+				lv_label_set_text( label, "BNB  MODE");
+				lv_timer_handler();
+			}
+			else{
 				currentCoinDisplayMode = BTC_MODE;
 				//显示BTC LOGO
 				LV_IMG_DECLARE(BTC_Logo_ARRAY);
@@ -208,6 +224,16 @@ start:
 
 		//设置ETH价格颜色
 		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_GREY));
+	}else if(currentCoinDisplayMode == BNB_MODE){
+		coinPrice = getBNBPrices();
+
+		//显示ETH LOGO
+		LV_IMG_DECLARE(BNB_Logo_ARRAY);
+		lv_img_set_src(logoImg, &BNB_Logo_ARRAY);
+		lv_obj_set_pos(logoImg, 15, 42);
+
+		//设置ETH价格颜色
+		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_YELLOW));
 	}
 	
 	if(coinPrice < 0){
@@ -222,7 +248,12 @@ start:
 		//设置出错颜色
 		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_RED));
 	}else{
-		sprintf(buf, "$%.0lf", coinPrice);
+		if(currentCoinDisplayMode == BNB_MODE){
+			sprintf(buf, "$%.1lf", coinPrice);
+		}else{
+			sprintf(buf, "$%.0lf", coinPrice);
+		}
+		
 		
 	}
 
