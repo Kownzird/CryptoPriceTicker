@@ -98,6 +98,7 @@ void changeCoinDisplayMode(){
 				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
 				lv_label_set_text( label, "ETH  MODE");
 				lv_timer_handler();
+				lv_style_set_text_font(&style, &lv_font_montserrat_30);
 			}else if(currentCoinDisplayMode == ETH_MODE){
 				currentCoinDisplayMode = BNB_MODE;
 
@@ -112,6 +113,7 @@ void changeCoinDisplayMode(){
 				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
 				lv_label_set_text( label, "BNB  MODE");
 				lv_timer_handler();
+				lv_style_set_text_font(&style, &lv_font_montserrat_30);
 			}
 			else{
 				currentCoinDisplayMode = BTC_MODE;
@@ -126,6 +128,7 @@ void changeCoinDisplayMode(){
 				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
 				lv_label_set_text( label, "BTC  MODE");
 				lv_timer_handler();
+				lv_style_set_text_font(&style, &lv_font_montserrat_30);
 			}
 		}
 	}
