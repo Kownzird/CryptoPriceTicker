@@ -17,6 +17,7 @@
 #define BTC_MODE  1
 #define ETH_MODE  2
 #define BNB_MODE  3
+#define OKB_MODE  4
 
 
 
@@ -112,6 +113,21 @@ void changeCoinDisplayMode(){
 				lv_obj_add_style(label, &style, 0);
 				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
 				lv_label_set_text( label, "BNB  MODE");
+				lv_timer_handler();
+				lv_style_set_text_font(&style, &lv_font_montserrat_30);
+			}else if(currentCoinDisplayMode == BNB_MODE){
+				currentCoinDisplayMode = OKB_MODE;
+
+				//显示OKB LOGO
+				LV_IMG_DECLARE(OKB_Logo_Array);
+				lv_img_set_src(logoImg, &OKB_Logo_Array);
+				lv_obj_set_pos(logoImg, 15, 42);
+
+				lv_style_set_text_font(&style, &lv_font_montserrat_20);
+				lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_BLUE_GREY));
+				lv_obj_add_style(label, &style, 0);
+				lv_obj_align( label, LV_ALIGN_LEFT_MID, 90, 0 );
+				lv_label_set_text( label, "OKB  MODE");
 				lv_timer_handler();
 				lv_style_set_text_font(&style, &lv_font_montserrat_30);
 			}
@@ -230,13 +246,23 @@ start:
 	}else if(currentCoinDisplayMode == BNB_MODE){
 		coinPrice = getBNBPrices();
 
-		//显示ETH LOGO
+		//显示BNB LOGO
 		LV_IMG_DECLARE(BNB_Logo_ARRAY);
 		lv_img_set_src(logoImg, &BNB_Logo_ARRAY);
 		lv_obj_set_pos(logoImg, 15, 42);
 
-		//设置ETH价格颜色
+		//设置BNB价格颜色
 		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_YELLOW));
+	}else if(currentCoinDisplayMode == OKB_MODE){
+		coinPrice = getOKBPrices();
+
+		//显示OKB LOGO
+		LV_IMG_DECLARE(OKB_Logo_Array);
+		lv_img_set_src(logoImg, &OKB_Logo_Array);
+		lv_obj_set_pos(logoImg, 15, 42);
+
+		//设置OKB价格颜色
+		lv_style_set_text_color(&style, lv_palette_main(LV_PALETTE_BLUE_GREY));
 	}
 	
 	if(coinPrice < 0){
@@ -253,6 +279,8 @@ start:
 	}else{
 		if(currentCoinDisplayMode == BNB_MODE){
 			sprintf(buf, "$%.1lf", coinPrice);
+		}else if(currentCoinDisplayMode == OKB_MODE){
+			sprintf(buf, "$%.2lf", coinPrice);
 		}else{
 			sprintf(buf, "$%.0lf", coinPrice);
 		}
