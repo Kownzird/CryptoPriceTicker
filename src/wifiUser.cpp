@@ -19,11 +19,23 @@ String wifi_pass = "";                     //暂时存储wifi账号密码
 String wifi_ssid_ap = "";                  //暂时存储AP模式接收的wifi账号密码
 String wifi_pass_ap = "";                  //暂时存储AP模式接收的wifi账号密码
 
+extern String btc_alarm_price;
+extern String eth_alarm_price;
+extern String bnb_alarm_price;
+extern String okb_alarm_price;
+static bool setAlarmPriceFlag = true;
+
 extern lv_obj_t *logoImg;
 extern lv_obj_t *label;
 extern lv_obj_t *label;
 extern lv_style_t style;
 
+/**
+ * @brief 保存WIFI账号及密码
+ * 
+ * @param ssid 
+ * @param password 
+ */
 void writeWifiConfig(String ssid, String password){
     if (SPIFFS.begin(true)) {
         File configFile = SPIFFS.open("/wifi.txt", "a");
@@ -46,6 +58,10 @@ void writeWifiConfig(String ssid, String password){
     }
 }
 
+/**
+ * @brief 删除所有保存WIFI账户密码信息
+ * 
+ */
 void deleteWifiConfig(){
     if (SPIFFS.begin(true)) {
         if (SPIFFS.exists("/wifi.txt")){
@@ -60,7 +76,7 @@ void deleteWifiConfig(){
     }
 }
 
- 
+
 /*
  * 处理网站根目录的访问请求
  */
@@ -71,9 +87,25 @@ void handleRoot(){
         server.send(200, "text/html", ROOT_HTML + scanNetworksID + "</body></html>");   
     }
 }
+
+/**
+ * @brief 处理预警价格设置的访问请求
+ * 
+ */
+void handleSetAlarmPrice(){
+    server.send(200, "text/html", "<!DOCTYPE html><html><head><title>ALARM</title>\
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+        </head><style type=\"text/css\">.input{display: block; margin-top: 10px;}.input span{width: 100px; float: left; float: left; height: 36px; line-height: 36px;}.input input{height: 30px;width: 200px;}.btn{width: 120px; height: 35px; background-color: #000000; border:0px; color:#ffffff; margin-top:15px; margin-left:100px;}</style><body>\
+        <form method=\"POST\" action=\"configAlarmPrice\">\
+        <label class=\"input\"><span>BTC/USD</span><input type=\"text\" name=\"BTC\" value=" + btc_alarm_price + "></label>\
+        <label class=\"input\"><span>ETH/USD</span> <input type=\"text\" name=\"ETH\" value=" + eth_alarm_price + "></label>\
+        <label class=\"input\"><span>BNB/USD</span><input type=\"text\" name=\"BNB\" value=" + bnb_alarm_price + "></label>\
+        <label class=\"input\"><span>OKB/USD</span><input type=\"text\" name=\"OKB\" value=" + okb_alarm_price+ "></label>\
+        <input class=\"btn\" type=\"submit\" name=\"submit\" value=\"Submit\"></form></body></html>");
+}
  
 /*
- * 提交数据后的提示页面
+ * 提交WIFI数据后的提示页面
  */
 void handleConfigWifi(){               //返回http状态
     if (server.hasArg("ssid")){          //判断是否有账号参数
@@ -100,7 +132,7 @@ void handleConfigWifi(){               //返回http状态
     }
 
     server.send(200, "text/html", "<meta charset='UTF-8'><p><span>SSID:" + wifi_ssid + "</p><br /><p><span>password:" + wifi_pass + "</p><br /><p><span>已取得WiFi信息,正在尝试连接,请手动关闭此页面。</p>"); //返回保存成功页面
-    delay(2000);
+    delay(1000);
 
     WiFi.softAPdisconnect(true);     //参数设置为true，设备将直接关闭接入点模式，即关闭设备所建立的WiFi网络。
     server.close();                  //关闭web服务
@@ -112,6 +144,87 @@ void handleConfigWifi(){               //返回http状态
     }else{
         Serial.println("Connected successful in WEB configure");
     }
+
+    setSetAlarmPriceFlag(false);
+}
+
+/**
+ * @brief 获取预警价格设置功能flag
+ * 
+ * @return true 
+ * @return false 
+ */
+bool getSetAlarmPriceFlag(){
+	return setAlarmPriceFlag;
+}
+
+void setSetAlarmPriceFlag(bool enable){
+    setAlarmPriceFlag = enable;
+}
+
+/**
+ * @brief 提交预警价格后的提示页面
+ * 
+ */
+void handleConfigAlarmPrice(){
+    //获取BTC预警价格
+    if (server.hasArg("BTC")){
+        Serial.print("Get BTC Alarm Price:");
+        btc_alarm_price = server.arg("BTC");   //获取html表单输入框name名为"BTC"的内容
+        Serial.println(btc_alarm_price);
+    }else{                                //没有参数
+        Serial.println("error, not found BTC");
+        server.send(200, "text/html", "<meta charset='UTF-8'>error, not found BTC/USD"); //返回错误页面
+        return;
+    }
+
+    //获取ETH预警价格
+    if (server.hasArg("ETH")){
+        Serial.print("Get ETH Alarm Price:");
+        eth_alarm_price = server.arg("ETH");   //获取html表单输入框name名为"ETH"的内容
+        Serial.println(eth_alarm_price);
+    }else{                                //没有参数
+        Serial.println("error, not found ETH");
+        server.send(200, "text/html", "<meta charset='UTF-8'>error, not found ETH/USD"); //返回错误页面
+        return;
+    }
+
+    //获取BNB预警价格
+    if (server.hasArg("BNB")){
+        Serial.print("Get BNB Alarm Price:");
+        bnb_alarm_price = server.arg("BNB");   //获取html表单输入框name名为"BNB"的内容
+        Serial.println(bnb_alarm_price);
+    }else{                                //没有参数
+        Serial.println("error, not found BNB");
+        server.send(200, "text/html", "<meta charset='UTF-8'>error, not found BNB/USD"); //返回错误页面
+        return;
+    }
+
+    //获取OKB预警价格
+    if (server.hasArg("OKB")){
+        Serial.print("Get OKB Alarm Price:");
+        okb_alarm_price = server.arg("OKB");   //获取html表单输入框name名为"OKB"的内容
+        Serial.println(okb_alarm_price);
+    }else{                                //没有参数
+        Serial.println("error, not found OKB");
+        server.send(200, "text/html", "<meta charset='UTF-8'>error, not found OKB/USD"); //返回错误页面
+        return;
+    }
+
+    server.send(200, "text/html", "<meta charset='UTF-8'>\
+                                    <p><span>BTC/USD:" + btc_alarm_price + "</p><br /> \
+                                    <p><span>ETH/USD:" + eth_alarm_price + "</p><br />\
+                                    <p><span>ETH/USD:" + bnb_alarm_price + "</p><br />\
+                                    <p><span>ETH/USD:" + okb_alarm_price + "</p><br />\
+                                    <p><span>已取得预警价格信息,请手动关闭此页面。</p>"); //返回保存成功页面
+    delay(1000);
+    
+    WiFi.softAPdisconnect(true);     //参数设置为true，设备将直接关闭接入点模式，即关闭设备所建立的WiFi网络。
+    server.close();                  //关闭web服务
+    WiFi.softAPdisconnect();         //在不输入参数的情况下调用该函数,将关闭接入点模式,并将当前配置的AP热点网络名和密码设置为空值.
+
+    //完成预警功能设置，关闭标志位
+    setSetAlarmPriceFlag(false);
 }
  
 /*
@@ -177,7 +290,9 @@ void initWebServer(){
 
     //必须添加第二个参数HTTP_GET，以下面这种格式去写，否则无法强制门户
     server.on("/", HTTP_GET, handleRoot);                      //  当浏览器请求服务器根目录(网站首页)时调用自定义函数handleRoot处理，设置主页回调函数，必须添加第二个参数HTTP_GET，否则无法强制门户
+    server.on("/configAlarmPrice", HTTP_GET, handleSetAlarmPrice);
     server.on("/configwifi", HTTP_POST, handleConfigWifi);     //  当浏览器请求服务器/configwifi(表单字段)目录时调用自定义函数handleConfigWifi处理
+    server.on("/configAlarmPrice", HTTP_POST, handleConfigAlarmPrice); //
                                                                 
     server.onNotFound(handleNotFound);                         //当浏览器请求的网络资源无法在服务器找到时调用自定义函数handleNotFound处理
     

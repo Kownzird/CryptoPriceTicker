@@ -2,9 +2,11 @@
 #include <WiFi.h>
 #include "../lib/TFT_eSPI/TFT_eSPI.h" // Graphics and font library for ST7735 driver chip
 #include "../lib/lvgl/lvgl.h"
+#include "../lib/ESP Mail Client/src/ESP_Mail_Client.h"
 
 #include "wifiUser.h"
 #include "getPriceAPI.h"
+#include "mailAlarm.h"
 
 #define VERSION "v1.0.03"
 #define LV_USE_LOG 0
@@ -13,13 +15,12 @@
 #define KEY0  0
 #define SELF_REFRESH_TIME_SECONDS 10
 #define SELF_REFRESH_INTERVAL_MILLISECONDS 500
+#define ALARM_PRICE_COUNT 3
 
 #define BTC_MODE  1
 #define ETH_MODE  2
 #define BNB_MODE  3
 #define OKB_MODE  4
-
-
 
 
 static const uint16_t screenWidth  = TFT_HEIGHT;
@@ -34,11 +35,12 @@ lv_style_t style;
 
 
 int getPriceErrCount = 0; //获取价格出错次数
+int alarmPriceCount = ALARM_PRICE_COUNT; //检测出低于预警值价格后连续发出警报邮件次数
 double coinPrice = -1; //WBTC价格
 String coinPriceStr = "";
 int currentCoinDisplayMode = BTC_MODE;
 int lastCoinDisplayMode = BTC_MODE;
-bool restoreWifiFlag = false;
+bool key0PressFlag = false;
 
 TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
@@ -66,7 +68,7 @@ void myDispFlush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_
 
 
 //KEY35中断处理函数
-void changeCoinDisplayMode(){
+void changeCoinDisplayModeHandler(){
 	int count = 1000;
 
 	if(digitalRead(KEY35) == LOW){
@@ -87,6 +89,7 @@ void changeCoinDisplayMode(){
 			if(currentCoinDisplayMode == BTC_MODE){
 				currentCoinDisplayMode = ETH_MODE;
 				// tft.drawCentreString("ETH  MODE",120,60,4);
+				alarmPriceCount = ALARM_PRICE_COUNT;
 
 				//显示BTC LOGO
 				LV_IMG_DECLARE(ETH_Logo_ARRAY);
@@ -102,6 +105,7 @@ void changeCoinDisplayMode(){
 				lv_style_set_text_font(&style, &lv_font_montserrat_30);
 			}else if(currentCoinDisplayMode == ETH_MODE){
 				currentCoinDisplayMode = BNB_MODE;
+				alarmPriceCount = ALARM_PRICE_COUNT;
 
 				//显示BNB LOGO
 				LV_IMG_DECLARE(BNB_Logo_ARRAY);
@@ -117,6 +121,7 @@ void changeCoinDisplayMode(){
 				lv_style_set_text_font(&style, &lv_font_montserrat_30);
 			}else if(currentCoinDisplayMode == BNB_MODE){
 				currentCoinDisplayMode = OKB_MODE;
+				alarmPriceCount = ALARM_PRICE_COUNT;
 
 				//显示OKB LOGO
 				LV_IMG_DECLARE(OKB_Logo_Array);
@@ -133,6 +138,7 @@ void changeCoinDisplayMode(){
 			}
 			else{
 				currentCoinDisplayMode = BTC_MODE;
+				alarmPriceCount = ALARM_PRICE_COUNT;
 				//显示BTC LOGO
 				LV_IMG_DECLARE(BTC_Logo_ARRAY);
 				lv_img_set_src(logoImg, &BTC_Logo_ARRAY);
@@ -151,9 +157,10 @@ void changeCoinDisplayMode(){
 }
 
 //KEY0中断处理函数
-void restoreWIFIMessage(){
-	restoreWifiFlag = true;
+void key0PressHandler(){
+	key0PressFlag = true;
 }
+
 
 
 //初始化函数
@@ -163,9 +170,9 @@ void setup(void) {
 	pinMode(KEY0, INPUT_PULLUP);
 
 	//绑定币种切换显示模式函数，下降沿触发
-	attachInterrupt(digitalPinToInterrupt(KEY35), changeCoinDisplayMode, FALLING);
+	attachInterrupt(digitalPinToInterrupt(KEY35), changeCoinDisplayModeHandler, FALLING);
 	//绑定清除网络配置函数，下降沿触发
-	attachInterrupt(digitalPinToInterrupt(KEY0), restoreWIFIMessage, FALLING);
+	attachInterrupt(digitalPinToInterrupt(KEY0), key0PressHandler, FALLING);
 
 	//初始化串口，波特率115200
   	Serial.begin(115200); 
@@ -210,6 +217,13 @@ void setup(void) {
 
 	//连接网络
 	connectToWiFi(15);
+
+	//SMTP服务初始化，使能邮件功能
+	smtpInit();
+	
+	//加载保存的预警价格
+	readAlarmPriceConfig();
+
 }
 
 
@@ -296,6 +310,36 @@ start:
 	lv_label_set_text( label, coinPriceStr.c_str() );
 	lastCoinDisplayMode = currentCoinDisplayMode;
 
+	//判断价格是否在警戒值内
+	if(checkAlarmPrice(String(coinPrice), currentCoinDisplayMode)){
+		if(alarmPriceCount){
+			alarmPriceCount--;
+			String alarmContent = "";
+			switch(currentCoinDisplayMode){
+				case BTC_MODE:
+					alarmContent = "BTC";
+					break;
+				case ETH_MODE:
+					alarmContent = "ETH";
+					break;
+				case BNB_MODE:
+					alarmContent = "BNB";
+					break;
+				case OKB_MODE:
+					alarmContent = "OKB";
+					break;
+			}
+
+			alarmContent += " Price: ";
+			alarmContent += coinPriceStr;
+			alarmContent += " \r\nLower than Alarmed: $";
+			alarmContent += getAlarmPrice(currentCoinDisplayMode);
+			sendMail(alarmContent);
+		}
+	}else{
+		alarmPriceCount = ALARM_PRICE_COUNT;
+	}
+
 	//重新连接Wifi
 	if(reconnectFlag){
 		checkConnect(true);
@@ -312,27 +356,48 @@ start:
 			break;
 		}
 
-		if(restoreWifiFlag){
-			for(int i=0; i< 3 * 5; i++){
+		if(key0PressFlag){
+			long long start_time = esp_timer_get_time();
+			long long end_time = 0L;
+
+			while(digitalRead(KEY0) == LOW){
+				Serial.println("KEY0 is pressed");
+				delay(200);
 				if(digitalRead(KEY0) == LOW){
-					Serial.println("KEY0 is press");
-					delay(200);
+					end_time = esp_timer_get_time();
+
+					//长按按键超过5s不释放，执行WIFI信息重置功能
+					if((end_time -start_time) >= 5*1000*1000){
+						Serial.println("Reset Wifi Message");
+
+						//达到5秒，清除网络配置并重启
+						deleteWifiConfig();
+						restoreWiFi();
+						ESP.restart();
+					}
 				}else{
-					//未达到3秒
-					restoreWifiFlag = false;
-					goto end_rst_wifi;
+					//释放按键，做按压时间判断
+					end_time = esp_timer_get_time();
+					//KEY0按压标志复位
+					key0PressFlag = false;
+
+					//按压时间1s，执行预警价格设置功能
+					if((end_time - start_time) >= 1*1000*1000){
+						Serial.println("Set Alarm Price");
+						setSetAlarmPriceFlag(true);
+						setAlarmPrice();
+						alarmPriceCount = ALARM_PRICE_COUNT;
+						Serial.println("Set Alarm Price Finushed");
+						showAlarmPriceDebug();
+					}
+					
+					goto end_sleep_fun;
 				}
 			}
-			
-			//达到3秒，清除网络配置并重启
-			deleteWifiConfig();
-			restoreWiFi();
-			ESP.restart();
 		}
-end_rst_wifi:
-		;
 	}
 
+end_sleep_fun:
 	lv_obj_remove_style_all(label);
 	checkDNS_HTTP();                  //检测客户端DNS&HTTP请求，也就是检查配网页面那部分
 	checkConnect(true);               //检测网络连接状态，参数true表示如果断开重新连接
