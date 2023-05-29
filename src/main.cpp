@@ -8,7 +8,7 @@
 #include "getPriceAPI.h"
 #include "mailAlarm.h"
 
-#define VERSION "v1.0.03"
+#define VERSION "v1.0.04"
 #define LV_USE_LOG 0
 
 #define KEY35 35
